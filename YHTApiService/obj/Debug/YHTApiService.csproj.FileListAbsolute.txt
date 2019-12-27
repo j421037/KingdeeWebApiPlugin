@@ -5,4 +5,3 @@ C:\Users\wangxin\Desktop\kingdee plugins\YHTApiService\YHTApiService\obj\Debug\Y
 C:\Users\wangxin\Desktop\kingdee plugins\YHTApiService\YHTApiService\obj\Debug\YHT.K3Erp.WebAPI.ServiceExtend.ServicesStub.pdb
 C:\Users\wangxin\Desktop\kingdee plugins\YHTApiService\YHTApiService\obj\Debug\YHTApiService.Properties.Resources.resources
 C:\Users\wangxin\Desktop\kingdee plugins\YHTApiService\YHTApiService\obj\Debug\YHTApiService.csproj.GenerateResource.cache
-C:\Users\wangxin\Desktop\kingdee plugins\YHTApiService\YHTApiService\obj\Debug\YHTApiService.csprojAssemblyReference.cache

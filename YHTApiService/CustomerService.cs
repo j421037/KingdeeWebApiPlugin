@@ -26,13 +26,15 @@ namespace YHT.K3Erp.WebAPI.ServiceExtend.ServicesStub
         }
 
         /// <summary>
-        /// 查询客户
+        /// 查询客户数据列表
         /// </summary>
         /// <param name="pagesize"></param>
         /// <param name="pagenow"></param>
+        /// <param name="cust_id"></param>
         /// <param name="percent"></param>
+        /// <param name="op"></param>
         /// <returns></returns>
-        public string QueryCustomer(string pagesize = null, string pagenow = null, string percent = null, string op = ">")
+        public string QueryCustomer(string pagesize = null, string pagenow = null, string cust_id = null, string percent = null, string op = "gt")
         {
             int PageSize = string.IsNullOrEmpty(pagesize) ? 20 : Convert.ToInt32(pagesize);
             int PageNow = string.IsNullOrEmpty(pagenow) ? 1 : Convert.ToInt32(pagenow);
@@ -50,10 +52,11 @@ namespace YHT.K3Erp.WebAPI.ServiceExtend.ServicesStub
             rows.Columns.Add("refunds");
             rows.Columns.Add("arrears");
             rows.Columns.Add("percent");
+            rows.Columns.Add("percent_str");
 
             //读取数据
-            custom_table.Load(CustSql());
-            ar_table.Load(CustARSum());
+            custom_table.Load(CustSql(cust_id));
+            ar_table.Load(CustARSum(cust_id));
             receivable_table.Load(CustReceivable());
             refund_table.Load(CustRefund());
 
@@ -81,14 +84,28 @@ namespace YHT.K3Erp.WebAPI.ServiceExtend.ServicesStub
                 row["refunds"] = Math.Round(f, 2);
                 row["arrears"] = Math.Round(arrears, 2);
                 row["percent"] = Math.Round(arrears / credit, 2);
+                row["percent_str"] = $"{row["percent"]:P}";
                 rows.Rows.Add(row);
             }
 
             EnumerableRowCollection<DataRow> dataRows = rows.AsEnumerable();
-            
-            if (!string.IsNullOrEmpty(percent))
+          
+            if (!string.IsNullOrEmpty(percent) && string.IsNullOrEmpty(cust_id))
             {
-                dataRows = dataRows.Where(s => Convert.ToDecimal(s.Field<string>("percent")) >= Convert.ToDecimal(percent));
+                decimal _p = Convert.ToDecimal(percent);
+                string _op = string.IsNullOrEmpty(op) ? "gt" : op;
+
+                dataRows = dataRows.Where(s => {
+                    if (_op.ToLower().Equals("gt"))
+                    {
+                        return Convert.ToDecimal(s.Field<string>("percent")) >= _p;
+                    }
+                    else
+                    {
+                        return Convert.ToDecimal(s.Field<string>("percent")) <= _p;
+                    }
+                    
+                });
             }
 
             int total = dataRows.Count();
@@ -101,6 +118,12 @@ namespace YHT.K3Erp.WebAPI.ServiceExtend.ServicesStub
             return JsonConvert.SerializeObject(new Dictionary<string, object> { { "state", "success" }, { "total", total }, { "rows", list },{ "pagesize", PageSize }, { "pageNow", PageNow } });
         }
 
+        /// <summary>
+        /// 遍历数据表
+        /// </summary>
+        /// <param name="rows"></param>
+        /// <param name="fcustid"></param>
+        /// <returns></returns>
         private decimal findAmount(DataTable rows, string fcustid)
         {
             decimal total = 0;
@@ -118,80 +141,32 @@ namespace YHT.K3Erp.WebAPI.ServiceExtend.ServicesStub
             return total;
         }
 
+       
+
+
         /// <summary>
-        /// 读取客户列表
+        /// 检索客户
         /// </summary>
-        /// <param name="pagenow"></param>
-        /// <param name="pagesize"></param>
+        /// <param name="fname"></param>
         /// <returns></returns>
-        public string CustomerList(string pagenow = null ,string pagesize = null)
+        public string SearchCust(string fname = null)
         {
-            int total = 0;
-            DataTable rows = new DataTable();
-            int PageNow = string.IsNullOrEmpty(pagenow) ? 1 : Convert.ToInt32(pagenow);
-            int PageSize = string.IsNullOrEmpty(pagesize) ? 10 : Convert.ToInt32(pagesize);
-            StringBuilder rsb = new StringBuilder();
-            StringBuilder tsb = new StringBuilder();
-            // select * from (select C0.FCUSTID, C0.FNAME, C1.F_M_credit, ROw_number() OVER (Order BY C0.FCUSTID) as row_number from T_BD_CUSTOMER_L AS C0 INNER JOIN T_BD_CUSTOMER AS C1 ON C0.FCUSTID = C1.FCUSTID WHERE C1.Fdocumentstatus = 'C') AS t where t.row_number between 10 and 20
-            rsb.Append("select * from (");
-            rsb.Append("select C0.FCUSTID, C0.FNAME, C1.F_M_credit, ROw_number() OVER (Order BY C0.FCUSTID DESC) as row_number from T_BD_CUSTOMER_L AS C0 ");
-            rsb.Append(" INNER JOIN T_BD_CUSTOMER AS C1 ON C0.FCUSTID = C1.FCUSTID ");
-            rsb.AppendFormat(" WHERE C1.Fdocumentstatus = 'C') AS t where t.row_number between {0} and {1} ", (PageNow - 1) * PageSize, PageNow * PageSize);
-           
-            //rsb.AppendFormat("select * from (select *, ROW_number() OVER (ORDER BY FCUSTID) as RowNum from T_BD_CUSTOMER) as t where t.FDOCUMENTSTATUS = 'C' and t.RowNum between {0} and {1} ", (PageNow - 1) * PageSize, PageNow * PageSize );
-            tsb.Append("SELECT count(*) AS total FROM T_BD_CUSTOMER where FDOCUMENTSTATUS = 'C'");
+            DataTable dt = new DataTable();
 
-
-            using (IDataReader reader = DBUtils.ExecuteReader(this.KDContext.Session.AppContext, rsb.ToString()))
+            if (!string.IsNullOrEmpty(fname))
             {
-                rows.Load(reader);
-                rows.Columns.Add("ARSUM"); // 应收总额
-                rows.Columns.Add("RECEIVABLES"); // 收款
-                rows.Columns.Add("REFUNS"); // 收款退款
-                rows.Columns.Add("ARREARS"); //  应收未收款
+                
+                StringBuilder sb = new StringBuilder();
+                sb.AppendFormat("SELECT fcustid, fname FROM T_BD_CUSTOMER_L WHERE fname LIKE '%{0}%'", fname);
 
-                int rowCount = rows.Rows.Count;
-
-                if ( rowCount  > 0)
+                using (IDataReader reader = DBUtils.ExecuteReader(this.KDContext.Session.AppContext, sb.ToString()))
                 {
-                    for (int i = 0; i < rowCount; ++i)
-                    {
-                        string cust_id = rows.Rows[i]["FCUSTID"].ToString();
-                        decimal arsum = LoadCustARSum(cust_id);
-                        decimal receivables = LoadCustReceivable(cust_id);
-                        decimal refunds = LoadCustRefund(cust_id);
-
-                        rows.Rows[i]["ARSUM"] = Math.Round(arsum, 2);
-                        rows.Rows[i]["RECEIVABLES"] = Math.Round(receivables,2);
-                        rows.Rows[i]["REFUNS"] = Math.Round(refunds);
-                        rows.Rows[i]["ARREARS"] = Math.Round(arsum - receivables + refunds); // 应收总额 - 收款 + 退款
-
-                        if (!string.IsNullOrEmpty(rows.Rows[i]["F_M_CREDIT"].ToString()))
-                        {
-                            rows.Rows[i]["F_M_CREDIT"] = Math.Round(Convert.ToDecimal(rows.Rows[i]["F_M_CREDIT"]));
-                        }
-                        else
-                        {
-                            rows.Rows[i]["F_M_CREDIT"] = DEFAULT_CREDIT;
-                        }
-                        
-                    }
+                    dt.Load(reader);
                 }
             }
 
-            using (IDataReader totalReader = DBUtils.ExecuteReader(this.KDContext.Session.AppContext, tsb.ToString()))
-            {
-                if (totalReader.Read())
-                {
-                    total = Convert.ToInt32(totalReader["total"]);
-                }
-            }
-
-            Dictionary<string, object> data = new Dictionary<string, object>() { { "rows", rows }, { "total", total }, { "state", "success" } };
-           
-            return JsonConvert.SerializeObject(data);
+            return JsonConvert.SerializeObject(new Dictionary<string, object>() { { "state", "success" }, { "rows", dt } });
         }
-
 
         /// <summary>
         /// 更新客户的信用额度
@@ -223,84 +198,23 @@ namespace YHT.K3Erp.WebAPI.ServiceExtend.ServicesStub
         }
 
 
-        
-
-        /// <summary>
-        /// 读取客户应收款汇总
-        /// </summary>
-        /// <param name="cust_id"></param>
-        /// <returns></returns>
-        public decimal LoadCustARSum(string cust_id)
-        {
-            StringBuilder sb = new StringBuilder();
-            sb.AppendFormat("SELECT sum(FallAmountFor) as amount from t_AR_receivable WHERE fcustomerID = {0} and Fdocumentstatus = 'C' ", cust_id);
-
-            return LoadAmount(sb.ToString());
-        }
-
-       
-
-        /// <summary>
-        /// 读取客户收款
-        /// </summary>
-        /// <param name="cust_id"></param>
-        /// <returns></returns>
-        public decimal LoadCustReceivable(string cust_id)
-        {
-            StringBuilder sb = new StringBuilder();
-            sb.AppendFormat("SELECT SUM(FRECEIVEAMOUNT) AS amount FROM T_AR_RECEIVEBILL WHERE fcontactunit = {0} and Fdocumentstatus = 'C'", cust_id);
-            return LoadAmount(sb.ToString());
-        }
-
-
-        /// <summary>
-        /// 读取收款退款
-        /// </summary>
-        /// <param name="cust_id"></param>
-        /// <returns></returns>
-        public decimal LoadCustRefund(string cust_id)
-        {
-            StringBuilder sb = new StringBuilder();
-            sb.AppendFormat("SELECT SUM(FREFUNDTOTALAMOUNTFOR) AS amount FROM T_AR_REFUNDBILL WHERE  fcontactunit = {0} and Fdocumentstatus = 'C'", cust_id);
-            return LoadAmount(sb.ToString());
-        }
-
-
-        /// <summary>
-        /// 执行sql读取金额
-        /// </summary>
-        /// <param name="sql"></param>
-        /// <returns></returns>
-        private decimal LoadAmount(string sql)
-        {
-            decimal total = 0;
-            using (IDataReader reader = DBUtils.ExecuteReader(this.KDContext.Session.AppContext, sql))
-            {
-                if (reader.Read())
-                {
-                    string amount = reader["amount"].ToString();
-
-                    if (!string.IsNullOrEmpty(amount))
-                    {
-                        total = Convert.ToDecimal(amount);
-                    }
-                }
-            }
-
-            return total;
-        }
 
         /// <summary>
         /// 读取全部客户的sql
         /// </summary>
         /// <returns></returns>
-        private IDataReader CustSql()
+        private IDataReader CustSql(string cust_id = null)
         {
             StringBuilder sb = new StringBuilder();
             sb.Append("select * from (");
             sb.Append("select C0.FCUSTID as fcustid, C0.FNAME, C1.F_M_credit, ROw_number() OVER (Order BY C0.FCUSTID DESC) as row_number from T_BD_CUSTOMER_L AS C0 ");
             sb.Append(" INNER JOIN T_BD_CUSTOMER AS C1 ON C0.FCUSTID = C1.FCUSTID ");
             sb.AppendFormat(" WHERE C1.Fdocumentstatus = 'C') AS t where t.row_number > 0 ");
+
+            if (!string.IsNullOrEmpty(cust_id))
+            {
+                sb.AppendFormat(" AND t.fcustid = {0} ", cust_id);
+            }
 
             IDataReader reader = DBUtils.ExecuteReader(this.KDContext.Session.AppContext, sb.ToString());
 
@@ -311,11 +225,19 @@ namespace YHT.K3Erp.WebAPI.ServiceExtend.ServicesStub
         /// 读取每个客户应收的sql
         /// </summary>
         /// <returns></returns>
-        private IDataReader CustARSum()
+        private IDataReader CustARSum(string cust_id = null)
         {
-           
-            string sql = "SELECT fcustomerID as fcustid, sum(FallAmountFor) as amount from t_AR_receivable WHERE  Fdocumentstatus = 'C' GROUP BY fcustomerID ";
-            IDataReader reader = DBUtils.ExecuteReader(this.KDContext.Session.AppContext, sql);
+            StringBuilder sb = new StringBuilder();
+            sb.Append("SELECT fcustomerID as fcustid, sum(FallAmountFor) as amount from t_AR_receivable WHERE  Fdocumentstatus = 'C' ");
+
+            if (!string.IsNullOrEmpty(cust_id))
+            {
+                sb.AppendFormat(" AND fcustomerID = {0} ", cust_id);
+            }
+
+            sb.Append(" GROUP BY fcustomerID ");
+            //string sql = "SELECT fcustomerID as fcustid, sum(FallAmountFor) as amount from t_AR_receivable WHERE  Fdocumentstatus = 'C' GROUP BY fcustomerID ";
+            IDataReader reader = DBUtils.ExecuteReader(this.KDContext.Session.AppContext, sb.ToString());
 
             return reader;
         }
