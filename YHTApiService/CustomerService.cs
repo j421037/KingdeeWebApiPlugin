@@ -18,7 +18,9 @@ namespace YHT.K3Erp.WebAPI.ServiceExtend.ServicesStub
     [Kingdee.BOS.Util.HotUpdate]
     public class CustomerService : AbstractWebApiBusinessService
     {
-        private const int DEFAULT_CREDIT = 500000;
+        private const int DEFAULT_CREDIT = 100000;
+
+        private const string TABLE_NAME = "YHT_Settings";
 
         public CustomerService(KDServiceContext context):base(context)
         {
@@ -197,8 +199,85 @@ namespace YHT.K3Erp.WebAPI.ServiceExtend.ServicesStub
             return JsonConvert.SerializeObject(response);
         }
 
+        /// <summary>
+        /// 更新公司额度
+        /// </summary>
+        /// <param name="total"></param>
+        /// <returns></returns>
+        public string UpdateCompanyTotal(string total)
+        {
+            Dictionary<string, string> response = new Dictionary<string, string>();
+            
+            try
+            {
+                bool state = tableExists(TABLE_NAME);
+                response["tableExists"] = state.ToString();
+                if (!state)
+                {
+                    createTable(TABLE_NAME);
+                }
 
+                StringBuilder sb = new StringBuilder();
+                sb.AppendFormat("if not exists (select * from {0} where p_key = 'company_total') INSERT INTO {1}(p_key, p_value) VALUES ('company_total', {2}) ", TABLE_NAME, TABLE_NAME, total);
+                sb.AppendFormat("else UPDATE {0} SET p_value = {1} where p_key = 'company_total'", TABLE_NAME, total);
 
+                DBUtils.Execute(this.KDContext.Session.AppContext, sb.ToString());
+
+                response["state"] = "success";
+            }
+            catch (Exception ex)
+            {
+                response["errmsg"] = ex.Message;
+                response["trace"] = ex.StackTrace;
+                response["state"] = "error";
+            }
+
+           
+
+            return JsonConvert.SerializeObject(response);
+        }
+
+        /// <summary>
+        /// 读取公司总额度
+        /// </summary>
+        /// <returns></returns>
+        public string LoadCompanyTotal()
+        {
+            Dictionary<string, object> response = new Dictionary<string, object>();
+
+            try
+            {
+                if (!tableExists(TABLE_NAME))
+                {
+                    createTable(TABLE_NAME);
+                }
+
+                string total = "";
+
+                string sql = string.Format("select * from {0} where p_key = 'company_total'", TABLE_NAME);
+
+                Dictionary<string, string> data = new Dictionary<string, string>();
+
+                IDataReader reader = DBUtils.ExecuteReader(this.KDContext.Session.AppContext, sql);
+
+                if (reader.Read())
+                {
+                    total = reader["p_value"].ToString();
+                }
+
+                response["data"] = new Dictionary<string, string>() { { "total", total } };
+
+            }
+            catch (Exception ex)
+            {
+                response["errmsg"] = ex.Message;
+                response["trace"] = ex.StackTrace;
+                response["state"] = "error";
+            }
+
+            return JsonConvert.SerializeObject(response);
+        }
+       
         /// <summary>
         /// 读取全部客户的sql
         /// </summary>
@@ -266,6 +345,41 @@ namespace YHT.K3Erp.WebAPI.ServiceExtend.ServicesStub
             IDataReader reader = DBUtils.ExecuteReader(this.KDContext.Session.AppContext, sql);
 
             return reader;
+        }
+
+        /// <summary>
+        /// 检查表是否存在
+        /// </summary>
+        /// <param name="name"></param>
+        /// <returns></returns>
+        private bool tableExists(string name)
+        {
+            string sql = string.Format("select * from sysobjects where type='U' and name='{0}'", name);
+            // int state_ = DBUtils.ExecuteScalar<int>(this.KDContext.Session.AppContext, sql, 0 );
+            IDataReader reader = DBUtils.ExecuteReader(this.KDContext.Session.AppContext, sql, 0);
+
+            return reader.Read();
+
+        }
+
+        /// <summary>
+        /// c创建表
+        /// </summary>
+        /// <param name="name"></param>
+        private bool createTable(string name)
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.AppendFormat("create table {0}(  p_key VARCHAR(255), p_value VARCHAR(255) default null)", name);
+            int state =  DBUtils.Execute(this.KDContext.Session.AppContext, sb.ToString());
+
+            if (Convert.ToBoolean(state))
+            {
+                string sql = string.Format("INSERT INTO {0} (p_key) values (`company_total`)", name);
+                state = DBUtils.Execute(this.KDContext.Session.AppContext, sql);
+
+                return Convert.ToBoolean(state);
+            }
+            return Convert.ToBoolean(state);
         }
 
     }
